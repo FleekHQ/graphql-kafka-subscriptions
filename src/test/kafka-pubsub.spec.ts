@@ -6,12 +6,10 @@ const mockProducer = jest.fn(() => ({
 }))
 const mockConsumer = jest.fn(() => {})
 const topic = 'test-topic'
-const host = 'localhost'
-const port = '9092'
+const host = 'localhost:9092'
 const pubsub = new KafkaPubSub({
   topic,
   host,
-  port,
 })
 
 describe('KafkaPubSub', () => {

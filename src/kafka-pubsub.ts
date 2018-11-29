@@ -1,4 +1,4 @@
-import * as Kafka from 'node-rdkafka'
+import * as Kafka from 'kafka-node';
 import { PubSubEngine } from 'graphql-subscriptions'
 import * as Logger from 'bunyan';
 import { createChildLogger } from './child-logger';
@@ -7,9 +7,11 @@ import { PubSubAsyncIterator } from './pubsub-async-iterator'
 export interface IKafkaOptions {
   topic: string
   host: string
-  port: string
+  partition?: number
   logger?: Logger,
-  groupId?: any,
+  kafkaOptions?: any
+  kafkaConsumerOptions?: any
+  kafkaProducerOptions?: any
 }
 
 export interface IKafkaProducer {
@@ -46,8 +48,27 @@ export class KafkaPubSub implements PubSubEngine {
 
   public publish(payload) {
     // only create producer if we actually publish something
-    this.producer = this.producer || this.createProducer(this.options.topic)
-    return this.producer.write(new Buffer(JSON.stringify(payload)))
+    const clientOptions = this.options.kafkaOptions || {}
+    const client = new Kafka.KafkaClient({ kafkaHost: this.options.host, ...clientOptions })
+    const producer = new Kafka.Producer(client)
+    producer.on('error', (err) => {
+      this.logger.error(err, 'Producer error in our kafka stream')
+    })
+    producer.on('ready', () => {
+      producer.send(
+        [{
+          topic: this.options.topic,
+          messages: JSON.stringify(payload),
+          partition: this.options.partition || 0
+        }],
+        (err, data) => {
+          if (err) {
+            this.logger.error(err, 'Error while publishing new kafka event')
+          }
+        }
+      )
+    })
+    return true;
   }
 
   public subscribe(
@@ -81,31 +102,29 @@ export class KafkaPubSub implements PubSubEngine {
     }
   }
 
-  brokerList(){
-    return this.options.host.match(',') ? this.options.host : `${this.options.host}:${this.options.port}`
-  }
-
-  private createProducer(topic: string) {
-    const producer = Kafka.Producer.createWriteStream({
-      'metadata.broker.list': this.brokerList()
-    }, {}, { topic })
-    producer.on('error', (err) => {
-      this.logger.error(err, 'Error in our kafka stream')
-    })
-    return producer
-  }
-
   private createConsumer(topic: string) {
-    // Create a group for each instance. The consumer will receive all messages from the topic
-    const groupId = this.options.groupId || Math.ceil(Math.random() * 9999)
-    const consumer = Kafka.KafkaConsumer.createReadStream({
-      'group.id': `kafka-group-${groupId}`,
-      'metadata.broker.list': this.brokerList(),
-    }, {}, {
-      topics: [topic]
-    })
-    consumer.on('data', (message) => {
-      let parsedMessage = JSON.parse(message.value.toString())
+    const clientOptions = this.options.kafkaOptions || {};
+    const client = new Kafka.KafkaClient({ kafkaHost: this.options.host, ...clientOptions })
+    const consumer = new Kafka.Consumer(
+      client,
+      [
+        {
+          topic,
+          partition: this.options.partition || 0,
+        }
+      ],
+      this.options.kafkaConsumerOptions || {},
+    )
+
+    consumer.on('message', (message) => {
+      const strMessage = typeof message.value === 'string' ? message.value : message.value.toString();
+      let parsedMessage;
+      try{
+        parsedMessage = JSON.parse(strMessage);
+      } catch (err) {
+        this.logger.error(err, 'Could not parse Kafka message');
+        return;
+      }
 
       // Using channel abstraction
       if (parsedMessage.channel) {
@@ -116,6 +135,10 @@ export class KafkaPubSub implements PubSubEngine {
       } else {
         this.onMessage(topic, parsedMessage)
       }
+    })
+
+    consumer.on('error', (err) => {
+      this.logger.error(err, 'Consumer error in our kafka stream')
     })
     return consumer
   }
