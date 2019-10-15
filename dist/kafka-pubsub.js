@@ -31,7 +31,9 @@ var KafkaPubSub = (function () {
         this.options = options;
         this.subscriptionMap = {};
         this.channelSubscriptions = {};
-        this.consumer = this.createConsumer(this.options.topic);
+        if (!this.options.skipConsumer) {
+            this.consumer = this.createConsumer(this.options.topic);
+        }
         this.logger = child_logger_1.createChildLogger(this.options.logger || defaultLogger, 'KafkaPubSub');
     }
     KafkaPubSub.prototype.publish = function (payload) {

@@ -1,9 +1,12 @@
 import { KafkaPubSub } from '../index'
 
 const mockWrite = jest.fn((msg) => msg)
-const mockProducer = jest.fn(() => ({
+const mockProducer = jest.fn(() => {
+  console.log('got here wtf');
+  return {
   write: mockWrite
-}))
+  }
+})
 const mockConsumer = jest.fn(() => {})
 const topic = 'test-topic'
 const host = 'localhost:9092'
@@ -30,5 +33,25 @@ describe('KafkaPubSub', () => {
     pubsub.publish(payload)
     expect(mockWrite).toBeCalled()
     expect(mockWrite).toBeCalledWith(new Buffer(JSON.stringify(payload)))
+  })
+})
+
+describe('KafkaPubSub test consumer skip flag', () => {
+  it('should not create consumer if flag is set', () => {
+    const pubsub = new KafkaPubSub({
+      topic,
+      host,
+      skipConsumer: true,
+    })
+    expect(pubsub).toBeDefined()
+    expect(pubsub['consumer']).toBeUndefined()
+  })
+  it('should create consumer if flag is set', () => {
+    const pubsub = new KafkaPubSub({
+      topic,
+      host,
+    })
+    expect(pubsub).toBeDefined()
+    expect(pubsub['consumer']).toBeDefined()
   })
 })

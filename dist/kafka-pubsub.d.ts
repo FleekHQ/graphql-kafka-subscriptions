@@ -6,6 +6,7 @@ export interface IKafkaOptions {
     host: string;
     partition?: number;
     logger?: Logger;
+    skipConsumer?: boolean;
     kafkaOptions?: any;
     kafkaConsumerOptions?: any;
     kafkaProducerOptions?: any;

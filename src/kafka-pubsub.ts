@@ -9,6 +9,7 @@ export interface IKafkaOptions {
   host: string
   partition?: number
   logger?: Logger,
+  skipConsumer?: boolean,
   kafkaOptions?: any
   kafkaConsumerOptions?: any
   kafkaProducerOptions?: any
@@ -41,7 +42,13 @@ export class KafkaPubSub implements PubSubEngine {
     this.options = options
     this.subscriptionMap = {}
     this.channelSubscriptions = {}
-    this.consumer = this.createConsumer(this.options.topic)
+
+    // bypass consumer for instances that will only
+    // produce
+    if(!this.options.skipConsumer){
+      this.consumer = this.createConsumer(this.options.topic)
+    }
+
     this.logger = createChildLogger(
       this.options.logger || defaultLogger, 'KafkaPubSub')
   }
